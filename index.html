@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <meta name="theme-color" content="#55cfff">
+    <link rel="manifest" href="manifest.json">
+
+    <title>Aviãozinho Feliz</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            touch-action: none;
+            font-family: Arial, sans-serif;
+            background: #55cfff;
+        }
+
+        canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        #topo {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+
+            pointer-events: none;
+        }
+
+        .placar {
+            background: rgba(255,255,255,0.9);
+            padding: 10px 20px;
+            border-radius: 30px;
+
+            font-size: 25px;
+            font-weight: bold;
+
+            color: #ff7b00;
+
+            box-shadow: 0 5px 10px rgba(0,0,0,0.15);
+        }
+
+        #som {
+            pointer-events: auto;
+
+            width: 55px;
+            height: 55px;
+
+            border: none;
+            border-radius: 50%;
+
+            background: white;
+
+            font-size: 25px;
+
+            cursor: pointer;
+        }
+
+        #evolucao {
+            position: fixed;
+            top: 82px;
+            left: 15px;
+            padding: 10px 14px;
+            border-radius: 18px;
+            background: rgba(255,255,255,.92);
+            color: #185479;
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        #evolucao strong, #evolucao span { display: block; }
+        #progresso { width: 170px; max-width: 55vw; height: 10px; accent-color: #ff9500; }
+        #vida-aviao { width: 170px; max-width: 55vw; height: 12px; accent-color: #20ad67; }
+        #mensagem { width: 90%; text-align: center; font-size: clamp(24px, 6vw, 45px); }
+        #dica-som { position: fixed; bottom: 15px; width: 100%; text-align: center; color: #185479; pointer-events: none; }
+        #inicio {
+            position: fixed; inset: 0; z-index: 5;
+            display: grid; place-items: center;
+            background: rgba(12, 70, 110, .3);
+        }
+        #inicio[hidden] { display: none; }
+        .cartao-inicio {
+            width: min(90vw, 380px); padding: 28px; border-radius: 28px;
+            background: #fff; color: #185479; text-align: center;
+            box-shadow: 0 12px 40px rgba(0,0,0,.2);
+        }
+        .cartao-inicio p { margin: 16px 0; line-height: 1.5; }
+        #comecar {
+            border: 0; border-radius: 20px; padding: 16px 24px;
+            background: #ff9500; color: #172f43; font-size: 20px;
+            font-weight: bold; cursor: pointer;
+        }
+
+        #mensagem {
+            position: fixed;
+
+            top: 25%;
+            left: 50%;
+
+            transform: translate(-50%, -50%);
+
+            font-size: 45px;
+            font-weight: bold;
+
+            color: white;
+
+            text-shadow:
+                3px 3px 0 #ff7b00,
+                5px 5px 10px rgba(0,0,0,.3);
+
+            pointer-events: none;
+
+            opacity: 0;
+        }
+
+        .mostrar {
+            animation: mensagem 1s ease;
+        }
+
+        @keyframes mensagem {
+
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(.5);
+            }
+
+            30% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1.3);
+            }
+
+            70% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -70%) scale(1);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<canvas id="jogo"></canvas>
+<div id="inicio">
+    <div class="cartao-inicio">
+        <h1>Aviãozinho Feliz ✈️</h1>
+        <p>Mova o avião, estoure os balões e evolua! Toque no botão para começar com som.</p>
+        <button id="comecar" type="button">Jogar com som 🔊</button>
+    </div>
+</div>
+
+<div id="topo">
+
+    <div class="placar">
+        ⭐ <span id="pontos">0</span>
+    </div>
+
+    <button id="som" type="button" aria-label="Ativar som" aria-pressed="false" title="Ativar som">
+        🔈
+    </button>
+
+</div>
+
+<div id="evolucao">
+    <strong id="nivel">Nível 1 · Aviãozinho</strong>
+    <span id="meta">Próxima evolução: 10 pontos</span>
+    <span id="armas">Balões: 3 de vida</span>
+    <span id="evento">Balão gigante em 30s</span>
+    <span id="vida-texto">❤️ Avião: 200 / 200</span>
+    <progress id="vida-aviao" value="200" max="200" aria-label="Vida do avião"></progress>
+    <span id="efeito">Reparo automático disponível 🔧</span>
+    <progress id="progresso" value="0" max="10" aria-label="Progresso para a próxima evolução"></progress>
+</div>
+<div id="dica-som">Toque na tela para ativar o som 🎵</div>
+
+<div id="mensagem" role="status" aria-live="polite">
+    MUITO BEM! ⭐
+</div>
+
+
+<script>
+
+const canvas = document.getElementById("jogo");
+const ctx = canvas.getContext("2d");
+
+let largura;
+let altura;
+
+function ajustarTela() {
+
+    largura = window.innerWidth;
+    altura = window.innerHeight;
+
+    canvas.width = largura;
+    canvas.height = altura;
+
+}
+
+ajustarTela();
+
+window.addEventListener("resize", ajustarTela);
+
+
+// ==================================================
+// JOGADOR
+// ==================================================
+
+const aviao = {
+
+    vida: 200,
+    vidaMaxima: 200,
+
+    x: window.innerWidth / 2,
+    y: window.innerHeight - 130,
+
+    alvoX: window.innerWidth / 2,
+    alvoY: window.innerHeight - 130
+
+};
+
+
+// ==================================================
+// OBJETOS
+// ==================================================
+
+let tiros = [];
+let misseis = [];
+let inimigos = [];
+let tirosInimigos = [];
+let tempoGigante = 0;
+let tempoInimigo = 0;
+let lentidao = 0;
+let protecao = 0;
+let ultimoQuadro = performance.now();
+const vidaBaloes = [3, 6, 10, 15];
+const tamanhoMaximoBalao = 25 + 3 * 12 + 15;
+const imagensBaloes = ["sofia rosto.png", "pai.png", "mamae.jpeg"].map(arquivo => {
+    const imagem = new Image();
+    imagem.src = "./img%20jogo/" + encodeURIComponent(arquivo);
+    return imagem;
+});
+let proximaImagemBalao = 0;
+let contadorMissil = 0;
+let baloes = [];
+let estrelas = [];
+let nuvens = [];
+
+let pontos = 0;
+
+const evolucoes = [
+    { pontos: 0, nome: "Aviãozinho", corpo: "#008cff", asas: "#ff3b30", ponta: "#ffd60a", intervalo: 35, disparos: [0] },
+    { pontos: 10, nome: "Asas Verdes", corpo: "#14b88a", asas: "#087f70", ponta: "#fff080", intervalo: 30, disparos: [-18, 18] },
+    { pontos: 25, nome: "Jato Violeta", corpo: "#9349ed", asas: "#e647b1", ponta: "#72f4ff", intervalo: 25, disparos: [-30, 0, 30] },
+    { pontos: 50, nome: "Super Avião Dourado", corpo: "#ffc629", asas: "#ff861c", ponta: "#ffffff", intervalo: 20, disparos: [-30, 0, 30] }
+];
+let nivel = 0;
+let celebracaoAte = 0;
+
+// Sons sintetizados: funcionam sem arquivos de áudio ou downloads.
+let audioContext;
+let volumeSom;
+let somLigado = true;
+let jogoIniciado = false;
+const botaoSom = document.getElementById("som");
+
+function atualizarBotaoSom() {
+    const ativo = somLigado && audioContext?.state === "running";
+    const rotulo = ativo ? "Desligar som" : "Ativar som";
+    botaoSom.textContent = ativo ? "🔊" : "🔇";
+    botaoSom.setAttribute("aria-pressed", String(ativo));
+    botaoSom.setAttribute("aria-label", rotulo);
+    botaoSom.title = rotulo;
+}
+
+function ativarAudio() {
+    if (!somLigado) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) {
+        document.getElementById("dica-som").textContent = "Este navegador não oferece suporte ao som.";
+        return;
+    }
+    try {
+        if (!audioContext || audioContext.state === "closed") {
+            audioContext = new AudioContext();
+            volumeSom = audioContext.createGain();
+            volumeSom.gain.value = .45;
+            volumeSom.connect(audioContext.destination);
+            audioContext.onstatechange = atualizarBotaoSom;
+        }
+        audioContext.resume().then(() => {
+            atualizarBotaoSom();
+            document.getElementById("dica-som").hidden = somLigado && audioContext.state === "running";
+            tocarSomTiro();
+        }).catch(() => {
+            document.getElementById("dica-som").hidden = false;
+            document.getElementById("dica-som").textContent = "Toque no botão de som para ativar 🎵";
+        });
+    } catch (erro) {
+        document.getElementById("dica-som").textContent = "Som indisponível neste navegador.";
+    }
+}
+
+function tocarNota(frequencia, final, duracao, atraso = 0, intensidade = .3, tipo = "sine") {
+    if (!somLigado || !audioContext || audioContext.state !== "running" || document.hidden) return;
+    const inicio = audioContext.currentTime + atraso;
+    const oscilador = audioContext.createOscillator();
+    const ganho = audioContext.createGain();
+    oscilador.type = tipo;
+    oscilador.frequency.setValueAtTime(frequencia, inicio);
+    oscilador.frequency.exponentialRampToValueAtTime(final, inicio + duracao);
+    ganho.gain.setValueAtTime(0, inicio);
+    ganho.gain.linearRampToValueAtTime(intensidade, inicio + .01);
+    ganho.gain.exponentialRampToValueAtTime(.001, inicio + duracao);
+    oscilador.connect(ganho);
+    ganho.connect(volumeSom);
+    oscilador.start(inicio);
+    oscilador.stop(inicio + duracao + .02);
+    oscilador.onended = () => { oscilador.disconnect(); ganho.disconnect(); };
+}
+
+botaoSom.addEventListener("click", () => {
+    // O primeiro clique ativa o áudio, em vez de desligá-lo antes de iniciar.
+    somLigado = !(somLigado && audioContext?.state === "running");
+    if (volumeSom) volumeSom.gain.setValueAtTime(somLigado ? .45 : 0, audioContext.currentTime);
+    atualizarBotaoSom();
+    document.getElementById("dica-som").hidden = true;
+    if (somLigado) ativarAudio();
+});
+
+document.getElementById("comecar").addEventListener("click", () => {
+    somLigado = true;
+    if (volumeSom) volumeSom.gain.setValueAtTime(.45, audioContext.currentTime);
+    ativarAudio();
+    jogoIniciado = true;
+    document.getElementById("inicio").hidden = true;
+});
+
+document.addEventListener("pointerdown", event => {
+    if (jogoIniciado && event.target !== botaoSom && audioContext?.state !== "running") ativarAudio();
+});
+document.addEventListener("keydown", event => {
+    if (!event.repeat && event.target !== botaoSom && audioContext?.state !== "running") ativarAudio();
+});
+
+function tocarSomTiro() {
+    tocarNota(1050, 280, .16, 0, .55, "triangle");
+}
+
+function atualizarEvolucao() {
+    const anterior = nivel;
+    while (nivel < evolucoes.length - 1 && pontos >= evolucoes[nivel + 1].pontos) nivel++;
+    const atual = evolucoes[nivel];
+    const proxima = evolucoes[nivel + 1];
+    document.getElementById("nivel").textContent = `Nível ${nivel + 1} · ${atual.nome}`;
+    document.getElementById("meta").textContent = proxima ? `Próxima evolução: ${proxima.pontos} pontos` : "Evolução máxima! ⭐";
+    document.getElementById("armas").textContent = `Balões: ${vidaBaloes[nivel]} de vida` + (proxima ? "" : " · Mísseis ativos 🚀");
+    const progresso = document.getElementById("progresso");
+    progresso.max = proxima ? proxima.pontos - atual.pontos : 1;
+    progresso.value = proxima ? pontos - atual.pontos : 1;
+    if (nivel !== anterior) {
+        celebracaoAte = performance.now() + 2400;
+        criarEstrelas(aviao.x, aviao.y, atual.ponta);
+        mostrarMensagem(`EVOLUIU! ${atual.nome} ✨`, true);
+        [523, 659, 784, 1047].forEach((nota, i) => tocarNota(nota, nota, .25, i * .13, .5));
+    }
+}
+
+let contadorTiro = 0;
+let contadorBalao = 0;
+
+
+// ==================================================
+// CORES
+// ==================================================
+
+const cores = [
+
+    "#ff3b30",
+    "#ff9500",
+    "#ffcc00",
+    "#34c759",
+    "#00c7ff",
+    "#007aff",
+    "#af52de",
+    "#ff2d92"
+
+];
+
+
+// ==================================================
+// NUVENS
+// ==================================================
+
+for(let i = 0; i < 12; i++) {
+
+    nuvens.push({
+
+        x: Math.random() * largura,
+        y: Math.random() * altura,
+
+        tamanho: 30 + Math.random() * 50,
+
+        velocidade: .3 + Math.random() * .5
+
+    });
+
+}
+
+
+// ==================================================
+// CONTROLE
+// ==================================================
+
+function moverPara(x, y) {
+
+    aviao.alvoX = x;
+
+    aviao.alvoY = Math.max(
+        altura * .35,
+        y
+    );
+
+}
+
+
+canvas.addEventListener("pointermove", event => {
+
+    moverPara(
+        event.clientX,
+        event.clientY
+    );
+
+});
+
+
+canvas.addEventListener("pointerdown", event => {
+
+    moverPara(
+        event.clientX,
+        event.clientY
+    );
+
+});
+
+
+// ==================================================
+// FUNDO
+// ==================================================
+
+function desenharFundo() {
+
+    const gradiente = ctx.createLinearGradient(
+        0,
+        0,
+        0,
+        altura
+    );
+
+    gradiente.addColorStop(
+        0,
+        "#4dc9ff"
+    );
+
+    gradiente.addColorStop(
+        1,
+        "#b8efff"
+    );
+
+    ctx.fillStyle = gradiente;
+
+    ctx.fillRect(
+        0,
+        0,
+        largura,
+        altura
+    );
+
+
+    // SOL
+
+    ctx.fillStyle = "#ffd60a";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        largura - 80,
+        100,
+        45,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // NUVENS
+
+    nuvens.forEach(nuvem => {
+
+        nuvem.y += nuvem.velocidade;
+
+        if(nuvem.y > altura + 100) {
+
+            nuvem.y = -100;
+            nuvem.x = Math.random() * largura;
+
+        }
+
+
+        ctx.fillStyle = "rgba(255,255,255,.75)";
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            nuvem.x,
+            nuvem.y,
+            nuvem.tamanho,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.arc(
+            nuvem.x + nuvem.tamanho,
+            nuvem.y,
+            nuvem.tamanho * .7,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.arc(
+            nuvem.x - nuvem.tamanho,
+            nuvem.y,
+            nuvem.tamanho * .7,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+    });
+
+}
+
+
+// ==================================================
+// AVIÃO
+// ==================================================
+
+function desenharAviao() {
+
+    // movimento suave
+    const resposta = lentidao > 0 ? .025 : .08;
+
+    aviao.x += (
+        aviao.alvoX - aviao.x
+    ) * resposta;
+
+    aviao.y += (
+        aviao.alvoY - aviao.y
+    ) * resposta;
+
+
+    aviao.x = Math.max(
+        60,
+        Math.min(
+            largura - 60,
+            aviao.x
+        )
+    );
+
+
+    aviao.y = Math.max(
+        200,
+        Math.min(
+            altura - 70,
+            aviao.y
+        )
+    );
+
+
+    ctx.save();
+
+    ctx.translate(
+        aviao.x,
+        aviao.y
+    );
+
+
+    const estilo = evolucoes[nivel];
+
+    if (protecao > 0) {
+        ctx.strokeStyle = lentidao > 0 ? "#ff8ee3" : "#ffffff";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, 76, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    if (performance.now() < celebracaoAte) {
+        ctx.strokeStyle = estilo.ponta;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, 82 + Math.sin(performance.now() / 120) * 8, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // Motores extras acompanham a evolução do avião.
+    for (let i = 0; i < nivel; i++) {
+        const distancia = 30 + i * 13;
+        for (const lado of [-1, 1]) {
+            ctx.fillStyle = estilo.corpo;
+            ctx.fillRect(lado * distancia - 5, 12, 10, 30);
+            ctx.fillStyle = estilo.ponta;
+            ctx.beginPath();
+            ctx.moveTo(lado * distancia - 5, 42);
+            ctx.lineTo(lado * distancia, 57 + Math.random() * 10);
+            ctx.lineTo(lado * distancia + 5, 42);
+            ctx.fill();
+        }
+    }
+
+    // sombra colorida
+
+    ctx.shadowColor = estilo.corpo;
+    ctx.shadowBlur = 20;
+
+
+    // ASAS
+
+    ctx.fillStyle = estilo.asas;
+
+    ctx.beginPath();
+
+    ctx.moveTo(-65, 10);
+    ctx.lineTo(-15, -5);
+
+    ctx.lineTo(0, -15);
+
+    ctx.lineTo(15, -5);
+    ctx.lineTo(65, 10);
+
+    ctx.lineTo(55, 30);
+    ctx.lineTo(15, 20);
+
+    ctx.lineTo(0, 30);
+
+    ctx.lineTo(-15, 20);
+    ctx.lineTo(-55, 30);
+
+    ctx.closePath();
+
+    ctx.fill();
+
+
+    // CORPO
+
+    ctx.fillStyle = estilo.corpo;
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        0,
+        0,
+        20,
+        50,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // PONTA
+
+    ctx.fillStyle = estilo.ponta;
+
+    ctx.beginPath();
+
+    ctx.moveTo(-17, -35);
+    ctx.lineTo(0, -65);
+    ctx.lineTo(17, -35);
+
+    ctx.fill();
+
+
+    // CABINE
+
+    ctx.fillStyle = "#d8f8ff";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        0,
+        -15,
+        10,
+        17,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // MOTOR
+
+    ctx.shadowColor = "#ff9500";
+
+    ctx.fillStyle = "#ffcc00";
+
+    ctx.beginPath();
+
+    ctx.moveTo(-10, 45);
+
+    ctx.lineTo(
+        0,
+        70 + Math.random() * 10
+    );
+
+    ctx.lineTo(10, 45);
+
+    ctx.fill();
+
+
+    ctx.restore();
+
+}
+
+
+// ==================================================
+// TIROS
+// ==================================================
+
+function criarTiro() {
+    for (const deslocamento of evolucoes[nivel].disparos) {
+        tiros.push({ x: aviao.x + deslocamento, y: aviao.y - 50 });
+    }
+    tocarSomTiro();
+
+}
+
+
+function atualizarTiros() {
+
+    tiros.forEach(tiro => {
+
+        tiro.y -= 9;
+
+
+        ctx.shadowColor = "#ffffff";
+        ctx.shadowBlur = 15;
+
+        ctx.fillStyle = "#fff";
+
+        ctx.beginPath();
+
+        ctx.arc(
+            tiro.x,
+            tiro.y,
+            7,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        ctx.shadowBlur = 0;
+
+    });
+
+
+    tiros = tiros.filter(
+        tiro => tiro.y > -30
+    );
+
+}
+
+
+// ==================================================
+// BALÕES
+// ==================================================
+
+function criarBalao(gigante = false) {
+
+    const tamanho =
+        gigante ? tamanhoMaximoBalao * 3 : 25 + nivel * 12 + Math.random() * 15;
+
+
+    baloes.push({
+
+        x: gigante ? largura / 2 :
+            tamanho + 8 +
+            Math.random() *
+            Math.max(0, largura - (tamanho + 8) * 2),
+
+        y: -tamanho * 1.2 - 10,
+
+        vida: gigante ? 80 + nivel * 40 : vidaBaloes[nivel],
+        vidaMaxima: gigante ? 80 + nivel * 40 : vidaBaloes[nivel],
+        gigante,
+        imagem: imagensBaloes[proximaImagemBalao++ % imagensBaloes.length],
+        brilhoAte: 0,
+
+        tamanho: tamanho,
+
+        velocidade:
+            gigante ? 1.2 : .8 + Math.random() * .8,
+
+        cor:
+            cores[
+                Math.floor(
+                    Math.random() *
+                    cores.length
+                )
+            ]
+
+    });
+
+}
+
+
+function desenharBaloes() {
+
+    baloes.forEach(balao => {
+
+        if (balao.gigante) {
+            balao.x = largura / 2;
+            balao.y = Math.min(balao.y + balao.velocidade, altura * .28);
+        } else {
+            balao.y += balao.velocidade;
+        }
+
+
+        // BALÃO
+
+        ctx.fillStyle = performance.now() < balao.brilhoAte ? "#ffffff" : balao.cor;
+
+        ctx.shadowColor = balao.cor;
+        ctx.shadowBlur = 15;
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            balao.x,
+            balao.y,
+            balao.tamanho,
+            balao.tamanho * 1.2,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        // A foto acompanha o formato do balão, sem distorcer a proporção.
+        const foto = balao.imagem;
+        if (foto && foto.complete && foto.naturalWidth > 0 && foto.naturalHeight > 0) {
+            ctx.save();
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.ellipse(balao.x, balao.y, balao.tamanho * .92, balao.tamanho * 1.12, 0, 0, Math.PI * 2);
+            ctx.clip();
+            const escala = Math.max(balao.tamanho * 1.84 / foto.naturalWidth, balao.tamanho * 2.24 / foto.naturalHeight);
+            const fotoLargura = foto.naturalWidth * escala;
+            const fotoAltura = foto.naturalHeight * escala;
+            ctx.drawImage(foto, balao.x - fotoLargura / 2, balao.y - fotoAltura / 2, fotoLargura, fotoAltura);
+            if (performance.now() < balao.brilhoAte) {
+                ctx.fillStyle = "rgba(255,255,255,.45)";
+                ctx.fillRect(balao.x - balao.tamanho, balao.y - balao.tamanho * 1.2, balao.tamanho * 2, balao.tamanho * 2.4);
+            }
+            ctx.restore();
+        }
+
+        // brilho
+
+        ctx.fillStyle =
+            "rgba(255,255,255,.6)";
+
+        ctx.beginPath();
+
+        ctx.arc(
+            balao.x - 8,
+            balao.y - 10,
+            5,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        // barbante
+
+        ctx.shadowBlur = 0;
+
+        ctx.strokeStyle = "#555";
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            balao.x,
+            balao.y + balao.tamanho
+        );
+
+        ctx.lineTo(
+            balao.x,
+            balao.y + balao.tamanho + 25
+        );
+
+        ctx.stroke();
+
+        if (balao.vidaMaxima > 1) {
+            ctx.save();
+            const barra = Math.min(balao.tamanho * 1.3, largura - 40);
+            const barraY = balao.gigante ? Math.max(Math.min(270, altura - 55), balao.y - balao.tamanho * 1.2 - 14) : balao.y - balao.tamanho * 1.2 - 14;
+            ctx.fillStyle = "#185479";
+            ctx.fillRect(balao.x - barra / 2, barraY, barra, 7);
+            ctx.fillStyle = "#65ef9b";
+            ctx.fillRect(balao.x - barra / 2, barraY, barra * balao.vida / balao.vidaMaxima, 7);
+            ctx.font = "bold 19px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = "#ffffff";
+            ctx.strokeStyle = "#185479";
+            ctx.lineWidth = 3;
+            const rotulo = balao.gigante ? `GIGANTE · ${balao.vida} / ${balao.vidaMaxima}` : balao.vida;
+            const textoY = balao.gigante ? barraY + 24 : balao.y + 10;
+            ctx.strokeText(rotulo, balao.x, textoY);
+            ctx.fillText(rotulo, balao.x, textoY);
+            ctx.restore();
+        }
+
+    });
+
+
+    baloes = baloes.filter(
+        balao => balao.y < altura + 100
+    );
+
+}
+
+
+// ==================================================
+// ESTRELAS
+// ==================================================
+
+function criarEstrelas(x, y, cor) {
+
+    for(let i = 0; i < 12; i++) {
+
+        estrelas.push({
+
+            x,
+            y,
+
+            dx:
+                (Math.random() - .5) * 8,
+
+            dy:
+                (Math.random() - .5) * 8,
+
+            tamanho:
+                3 + Math.random() * 7,
+
+            vida: 35,
+
+            cor
+
+        });
+
+    }
+
+}
+
+
+function desenharEstrelas() {
+
+    estrelas.forEach(estrela => {
+
+        estrela.x += estrela.dx;
+        estrela.y += estrela.dy;
+
+        estrela.dy += .05;
+
+        estrela.vida--;
+
+
+        ctx.globalAlpha =
+            estrela.vida / 35;
+
+
+        ctx.fillStyle = estrela.cor;
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            estrela.x,
+            estrela.y,
+            estrela.tamanho,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        ctx.globalAlpha = 1;
+
+    });
+
+
+    estrelas = estrelas.filter(
+        estrela => estrela.vida > 0
+    );
+
+}
+
+
+// ==================================================
+// COLISÕES
+// ==================================================
+
+function atingiuBalao(projetil, balao, raio = 7) {
+    return ((projetil.x - balao.x) / (balao.tamanho + raio)) ** 2 +
+        ((projetil.y - balao.y) / (balao.tamanho * 1.2 + raio)) ** 2 <= 1;
+}
+
+function causarDano(balao, dano) {
+    if (!baloes.includes(balao)) return;
+    balao.vida = Math.max(0, balao.vida - dano);
+    balao.brilhoAte = performance.now() + 100;
+    if (balao.vida > 0) {
+        tocarNota(760, 450, .08, 0, .3, "triangle");
+        return;
+    }
+    criarEstrelas(balao.x, balao.y, balao.cor);
+    baloes.splice(baloes.indexOf(balao), 1);
+    pontos += balao.gigante ? 10 : 1;
+    document.getElementById("pontos").textContent = pontos;
+    tocarNota(420, 110, .13, 0, .45);
+    atualizarEvolucao();
+    mostrarMensagem();
+}
+
+function verificarColisoes() {
+    for (let j = tiros.length - 1; j >= 0; j--) {
+        const balao = baloes.find(alvo => atingiuBalao(tiros[j], alvo));
+        if (balao) {
+            tiros.splice(j, 1);
+            causarDano(balao, 1);
+        } else {
+            const inimigo = inimigos.find(alvo => Math.hypot(tiros[j].x - alvo.x, tiros[j].y - alvo.y) < 29);
+            if (inimigo) {
+                tiros.splice(j, 1);
+                inimigo.vida--;
+                if (inimigo.vida <= 0) {
+                    criarEstrelas(inimigo.x, inimigo.y, "#b68cff");
+                    inimigos.splice(inimigos.indexOf(inimigo), 1);
+                    tocarNota(500, 180, .15);
+                }
+            }
+        }
+    }
+}
+
+// Cada missil procura um alvo visivel e troca de alvo se ele desaparecer.
+function buscarAlvo(x, y) {
+    let melhor = null;
+    let menorDistancia = Infinity;
+    for (const balao of baloes) {
+        if (balao.y < 0 || balao.y > altura) continue;
+        const distancia = Math.hypot(balao.x - x, balao.y - y);
+        if (distancia < menorDistancia) {
+            melhor = balao;
+            menorDistancia = distancia;
+        }
+    }
+    return melhor;
+}
+
+function lancarMissil() {
+    if (nivel !== evolucoes.length - 1 || misseis.length >= 4) return false;
+    const alvo = buscarAlvo(aviao.x, aviao.y);
+    if (!alvo) return false;
+    misseis.push({x: aviao.x, y: aviao.y - 55, alvo, vida: 240, angulo: -Math.PI / 2});
+    tocarNota(200, 850, .3, 0, .4, "triangle");
+    return true;
+}
+
+function atualizarMisseis() {
+    if (nivel === evolucoes.length - 1) {
+        contadorMissil = Math.min(contadorMissil + 1, 90);
+        if (contadorMissil >= 90 && lancarMissil()) contadorMissil = 0;
+    }
+    for (let i = misseis.length - 1; i >= 0; i--) {
+        const missil = misseis[i];
+        if (!baloes.includes(missil.alvo) || missil.alvo.y > altura) {
+            missil.alvo = buscarAlvo(missil.x, missil.y);
+        }
+        if (missil.alvo) {
+            missil.angulo = Math.atan2(missil.alvo.y - missil.y, missil.alvo.x - missil.x);
+        }
+        missil.x += Math.cos(missil.angulo) * 7;
+        missil.y += Math.sin(missil.angulo) * 7;
+        missil.vida--;
+        const atingido = baloes.find(balao => atingiuBalao(missil, balao, 10));
+        if (atingido) {
+            causarDano(atingido, 3);
+            criarEstrelas(missil.x, missil.y, "#ffb52e");
+            misseis.splice(i, 1);
+            continue;
+        }
+        if (missil.vida <= 0 || missil.x < -50 || missil.x > largura + 50 || missil.y < -100 || missil.y > altura + 100) {
+            misseis.splice(i, 1);
+            continue;
+        }
+        ctx.save();
+        ctx.translate(missil.x, missil.y);
+        ctx.rotate(missil.angulo + Math.PI / 2);
+        ctx.fillStyle = "#ff981f";
+        ctx.beginPath();
+        ctx.moveTo(-6, 12);
+        ctx.lineTo(0, 30 + Math.random() * 10);
+        ctx.lineTo(6, 12);
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#176195";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -18);
+        ctx.lineTo(8, 1);
+        ctx.lineTo(12, 15);
+        ctx.lineTo(-12, 15);
+        ctx.lineTo(-8, 1);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#ff6352";
+        ctx.fillRect(-5, 0, 10, 5);
+        ctx.restore();
+    }
+}
+
+
+// ==================================================
+// MENSAGEM
+// ==================================================
+
+const frases = [
+
+    "MUITO BEM! ⭐",
+
+    "LEGAL! 🌈",
+
+    "UAU! 😄",
+
+    "PARABÉNS! 🎉",
+
+    "ISSO! ⭐",
+
+    "SHOW! 🚀"
+
+];
+
+
+function mostrarMensagem(texto, evoluiu = false) {
+
+    if (!evoluiu && performance.now() < celebracaoAte) return;
+
+    const mensagem =
+        document.getElementById(
+            "mensagem"
+        );
+
+
+    mensagem.style.animationDuration = evoluiu ? "2.4s" : "1s";
+    mensagem.textContent = texto ||
+        frases[
+            Math.floor(
+                Math.random() *
+                frases.length
+            )
+        ];
+
+
+    mensagem.classList.remove(
+        "mostrar"
+    );
+
+
+    void mensagem.offsetWidth;
+
+
+    mensagem.classList.add(
+        "mostrar"
+    );
+
+}
+
+
+// ==================================================
+// LOOP
+// ==================================================
+
+function criarInimigo() {
+    if (inimigos.length >= 4) return;
+    inimigos.push({
+        x: 35 + Math.random() * Math.max(0, largura - 70), y: -40,
+        fase: Math.random() * Math.PI * 2, vida: 2 + nivel,
+        recarga: 1.2, idade: 0
+    });
+}
+
+function atualizarInimigos(dt) {
+    lentidao = Math.max(0, lentidao - dt);
+    protecao = Math.max(0, protecao - dt);
+    document.getElementById("efeito").textContent = lentidao > 0
+        ? "Ops! Movimento lento por um instante 🫧" : "Reparo automático disponível 🔧";
+    for (const inimigo of inimigos) {
+        inimigo.idade += dt;
+        inimigo.y += 34 * dt;
+        inimigo.x = Math.max(30, Math.min(largura - 30,
+            inimigo.x + Math.sin(inimigo.idade * 2 + inimigo.fase) * 45 * dt));
+        inimigo.recarga -= dt;
+        if (inimigo.recarga <= 0 && inimigo.y > 20 && inimigo.y < altura - 100) {
+            const angulo = Math.atan2(aviao.y - inimigo.y, aviao.x - inimigo.x);
+            tirosInimigos.push({x: inimigo.x, y: inimigo.y + 20,
+                vx: Math.cos(angulo) * 150, vy: Math.sin(angulo) * 150, vida: 7});
+            inimigo.recarga = 2;
+        }
+        ctx.save();
+        ctx.translate(inimigo.x, inimigo.y);
+        ctx.fillStyle = "#7244ac";
+        ctx.beginPath();
+        ctx.moveTo(0, 28);
+        ctx.lineTo(-10, 6);
+        ctx.lineTo(-29, -7);
+        ctx.lineTo(-25, -16);
+        ctx.lineTo(-7, -10);
+        ctx.lineTo(0, -24);
+        ctx.lineTo(7, -10);
+        ctx.lineTo(25, -16);
+        ctx.lineTo(29, -7);
+        ctx.lineTo(10, 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = "#c3f6ff";
+        ctx.beginPath();
+        ctx.ellipse(0, 5, 6, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+    inimigos = inimigos.filter(inimigo => inimigo.y < altura + 50);
+    for (let i = tirosInimigos.length - 1; i >= 0; i--) {
+        const tiro = tirosInimigos[i];
+        tiro.x += tiro.vx * dt;
+        tiro.y += tiro.vy * dt;
+        tiro.vida -= dt;
+        if (Math.hypot(tiro.x - aviao.x, tiro.y - aviao.y) < 40) {
+            tirosInimigos.splice(i, 1);
+            if (protecao <= 0) {
+                lentidao = .9;
+                protecao = 2.5;
+                aviao.vida = Math.max(0, aviao.vida - 10);
+                if (aviao.vida === 0) {
+                    aviao.vida = aviao.vidaMaxima;
+                    protecao = 5;
+                    lentidao = 0;
+                    mostrarMensagem("AVIÃO REPARADO! 🔧", true);
+                }
+                document.getElementById("vida-texto").textContent = `❤️ Avião: ${aviao.vida} / ${aviao.vidaMaxima}`;
+                document.getElementById("vida-aviao").value = aviao.vida;
+                criarEstrelas(aviao.x, aviao.y, "#ff8ee3");
+                tocarNota(260, 180, .15, 0, .25);
+            }
+            continue;
+        }
+        if (tiro.vida <= 0 || tiro.x < -30 || tiro.x > largura + 30 || tiro.y < -30 || tiro.y > altura + 30) {
+            tirosInimigos.splice(i, 1);
+            continue;
+        }
+        ctx.save();
+        ctx.fillStyle = "#ff8ee3";
+        ctx.strokeStyle = "#753582";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(tiro.x, tiro.y, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+function atualizarEventos(dt) {
+    tempoGigante += dt;
+    tempoInimigo += dt;
+    let gigante = baloes.find(balao => balao.gigante);
+    if (tempoGigante >= 30 && !gigante) {
+        criarBalao(true);
+        gigante = baloes[baloes.length - 1];
+        tempoGigante = 0;
+        mostrarMensagem("BALÃO GIGANTE! 🎈");
+    }
+    document.getElementById("evento").textContent = gigante
+        ? `Gigante: ${gigante.vida} de vida · vale 10 ⭐`
+        : `Balão gigante em ${Math.max(0, Math.ceil(30 - tempoGigante))}s`;
+    if (tempoInimigo >= 7) {
+        criarInimigo();
+        tempoInimigo = 0;
+    }
+}
+
+function jogo() {
+
+    const agora = performance.now();
+    const dt = Math.min((agora - ultimoQuadro) / 1000, .05);
+    ultimoQuadro = agora;
+
+    desenharFundo();
+
+    if (!jogoIniciado || document.hidden) {
+        desenharAviao();
+        requestAnimationFrame(jogo);
+        return;
+    }
+
+    atualizarEventos(dt);
+
+    desenharBaloes();
+
+    atualizarTiros();
+
+    desenharEstrelas();
+
+    desenharAviao();
+
+    atualizarInimigos(dt);
+
+    verificarColisoes();
+
+    atualizarMisseis();
+
+
+    // TIRO AUTOMÁTICO
+
+    contadorTiro++;
+
+    if(contadorTiro > evolucoes[nivel].intervalo) {
+
+        criarTiro();
+
+        contadorTiro = 0;
+
+    }
+
+
+    // NOVOS BALÕES
+
+    contadorBalao++;
+
+    if(contadorBalao > 80) {
+
+        criarBalao();
+
+        contadorBalao = 0;
+
+    }
+
+
+    requestAnimationFrame(jogo);
+
+}
+
+
+jogo();
+
+
+// ==================================================
+// SERVICE WORKER
+// ==================================================
+
+if("serviceWorker" in navigator) {
+
+    window.addEventListener(
+        "load",
+        () => {
+
+            navigator.serviceWorker
+                .register("./sw.js");
+
+        }
+    );
+
+}
+
+</script>
+
+</body>
+</html>
